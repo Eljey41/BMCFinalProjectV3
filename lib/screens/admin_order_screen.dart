@@ -15,18 +15,29 @@ class _AdminOrderScreenState extends State<AdminOrderScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   // 2. This is the function that updates the status in Firestore
-  Future<void> _updateOrderStatus(String orderId, String newStatus) async {
+  Future<void> _updateOrderStatus(String orderId, String newStatus, String userId) async {
     try {
       // 3. Find the document and update the 'status' field
       await _firestore.collection('orders').doc(orderId).update({
         'status': newStatus,
+
       });
+
+      await _firestore.collection('notifications').add({
+        'userId': userId, // 4. The user this notification is for
+        'title': 'Order Status Updated',
+        'body': 'Your order ($orderId) has been updated to "$newStatus".',
+        'orderId': orderId,
+        'createdAt': FieldValue.serverTimestamp(),
+        'isRead': false, // 5. Mark it as unread
+      });
+
+
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Order status updated!')),
       );
 
-      if (!mounted) return;
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to update status: $e')),
@@ -35,10 +46,10 @@ class _AdminOrderScreenState extends State<AdminOrderScreen> {
   }
 
   // 4. This function shows the update dialog
-  void _showStatusDialog(String orderId, String currentStatus) {
+  void _showStatusDialog(String orderId, String currentStatus, String userId) {
     showDialog(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
         // 5. A list of all possible statuses
         const statuses = ['Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelled'];
 
@@ -53,10 +64,11 @@ class _AdminOrderScreenState extends State<AdminOrderScreen> {
                 // 7. Show a checkmark next to the current status
                 trailing: currentStatus == status ? const Icon(Icons.check) : null,
                 onTap: () {
-                  // 8. When tapped:
-                  _updateOrderStatus(orderId, status); // Call update
-                  Navigator.of(context).pop(); // Close the dialog
+                  // 2. PASS userId to our update function
+                  _updateOrderStatus(orderId, status, userId);
+                  Navigator.of(dialogContext).pop();
                 },
+
               );
             }).toList(),
           ),
@@ -114,6 +126,7 @@ class _AdminOrderScreenState extends State<AdminOrderScreen> {
 
               // 6. Get the current status
               final String status = orderData['status'];
+              final String userId = orderData['userId'] ?? 'Unknown User';
 
               // 7. Build a Card for each order
               return Card(
@@ -144,8 +157,10 @@ class _AdminOrderScreenState extends State<AdminOrderScreen> {
 
                   // 9. On tap, show our update dialog
                   onTap: () {
-                    _showStatusDialog(order.id, status);
+                    // 3. PASS userId from the order data to our dialog
+                    _showStatusDialog(order.id, status, userId);
                   },
+
                 ),
               );
             },

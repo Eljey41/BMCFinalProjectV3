@@ -74,13 +74,23 @@ class CartProvider with ChangeNotifier {
     return total;
   }
 
-  double get totalPrice {
+  double get subtotal {
     double total = 0.0;
     for (var item in _items) {
-      total += item.price * item.quantity;
+      total += (item.price * item.quantity);
     }
     return total;
   }
+
+  double get vat {
+    return subtotal * 0.12; // 12% of the subtotal
+  }
+
+  double get totalPriceWithVat {
+    return subtotal + vat;
+  }
+
+
 
 
 
@@ -165,18 +175,27 @@ class CartProvider with ChangeNotifier {
   // ===========================================================
   // Add Item To Cart
   // ===========================================================
-  void addItem(String id, String name, double price) {
+  void addItem(String id, String name, double price, int quantity) {
+    // 3. Check if the item is already in the cart
     var index = _items.indexWhere((item) => item.id == id);
 
     if (index != -1) {
-      _items[index].quantity++;
+      // 4. If YES: Add the new quantity to the existing quantity
+      _items[index].quantity += quantity;
     } else {
-      _items.add(CartItem(id: id, name: name, price: price));
+      // 5. If NO: Add the item with the specified quantity
+      _items.add(CartItem(
+        id: id,
+        name: name,
+        price: price,
+        quantity: quantity, // Use the quantity from the parameter
+      ));
     }
 
-    _saveCart();   // Sync changes to Firestore
-    notifyListeners();
+    _saveCart(); // This is the same
+    notifyListeners(); // This is the same
   }
+
 
 
 
@@ -203,18 +222,24 @@ class CartProvider with ChangeNotifier {
       _items.map((item) => item.toJson()).toList();
 
       // 4. Get total price and item count from our getters
-      final double total = totalPrice;
+      final double sub = subtotal;
+      final double v = vat;
+      final double total = totalPriceWithVat;
       final int count = itemCount;
+
 
       // 5. Create a new document in the 'orders' collection
       await _firestore.collection('orders').add({
         'userId': _userId,
-        'items': cartData, // Our list of item maps
-        'totalPrice': total,
+        'items': cartData,
+        'subtotal': sub,       // 3. ADD THIS
+        'vat': v,            // 4. ADD THIS
+        'totalPrice': total,   // 5. This is now the VAT-inclusive price
         'itemCount': count,
-        'status': 'Pending', // 6. IMPORTANT: For admin verification
-        'createdAt': FieldValue.serverTimestamp(), // For sorting
+        'status': 'Pending',
+        'createdAt': FieldValue.serverTimestamp(),
       });
+
 
       // 7. Note: We DO NOT clear the cart here.
       //    We'll call clearCart() separately from the UI after this succeeds.
@@ -222,7 +247,7 @@ class CartProvider with ChangeNotifier {
     } catch (e) {
       print('Error placing order: $e');
       // 8. Re-throw the error so the UI can catch it
-      throw e;
+      rethrow;
     }
   }
 

@@ -8,6 +8,10 @@ import 'package:ecommerce_app/providers/cart_provider.dart'; // 1. ADD THIS
 import 'package:ecommerce_app/screens/cart_screen.dart'; // 2. ADD THIS
 import 'package:provider/provider.dart';
 import 'package:ecommerce_app/screens/order_history_screen.dart';
+import 'package:ecommerce_app/screens/profile_screen.dart';
+import 'package:ecommerce_app/widgets/notification_icon.dart';
+import 'package:ecommerce_app/screens/chat_screen.dart';
+
 
 
 class HomeScreen extends StatefulWidget {
@@ -20,6 +24,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   String _userRole = 'user';
   final User? _currentUser = FirebaseAuth.instance.currentUser;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   @override
   void initState() {
@@ -44,7 +49,6 @@ class _HomeScreenState extends State<HomeScreen> {
       print("Error fetching user role: $e");
     }
   }
-
   Future<void> _signOut() async {
     try {
       await FirebaseAuth.instance.signOut();
@@ -52,6 +56,8 @@ class _HomeScreenState extends State<HomeScreen> {
       print('Error signing out: $e');
     }
   }
+
+
 
   @override
   Widget build(BuildContext context) {
@@ -81,8 +87,13 @@ class _HomeScreenState extends State<HomeScreen> {
                   },
                 ),
               );
+
             },
+
           ),
+
+          const   NotificationIcon(),
+
 
           IconButton(
             icon: const Icon(Icons.receipt_long), // A "receipt" icon
@@ -111,10 +122,17 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
 
           IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: 'Logout',
-            onPressed: _signOut,
+            icon: const Icon(Icons.person_outline),
+            tooltip: 'Profile',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => const ProfileScreen(),
+                ),
+              );
+            },
           ),
+
         ],
       ),
 
@@ -176,6 +194,49 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         },
       ),
+      floatingActionButton: _userRole == 'user'
+          ? StreamBuilder<DocumentSnapshot>( // 2. A new StreamBuilder
+        // 3. Listen to *this user's* chat document
+        stream: _firestore.collection('chats').doc(_currentUser!.uid).snapshots(),
+        builder: (context, snapshot) {
+
+          int unreadCount = 0;
+          // 4. Check if the doc exists and has our count field
+          if (snapshot.hasData && snapshot.data!.exists) {
+            // Ensure data is not null before casting
+            final data = snapshot.data!.data();
+            if (data != null) {
+              unreadCount = (data as Map<String, dynamic>)['unreadByUserCount'] ?? 0;
+            }
+          }
+
+          // 5. --- THE FIX for "trailing not defined" ---
+          //    We wrap the FAB in the Badge widget
+          return Badge(
+            // 6. Show the count in the badge
+            label: Text('$unreadCount'),
+            // 7. Only show the badge if the count is > 0
+            isLabelVisible: unreadCount > 0,
+            // 8. The FAB is now the *child* of the Badge
+            child: FloatingActionButton.extended(
+              icon: const Icon(Icons.support_agent),
+              label: const Text('Contact Admin'),
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => ChatScreen(
+                      chatRoomId: _currentUser!.uid,
+                    ),
+                  ),
+                );
+              },
+            ),
+          );
+          // --- END OF FIX ---
+        },
+      ) : null, // 9. If admin, don't show the FAB
     );
+
+
   }
 }
